@@ -10,6 +10,9 @@ categories = ["multimedia::video"]
 exclude = ["testdata/", "examples/", "fuzz/", "BENCHMARK.md"]
 
 [features]
+default = ["std"]
+# Standard library support. Disable for `no_std` + `alloc` builds.
+std = []
 # Optional windowed playback example (`cargo run --example play --features minifb`).
 minifb = ["dep:minifb"]
 # Expose internal modules (sps, pps, slice) for debug/diagnostic examples.

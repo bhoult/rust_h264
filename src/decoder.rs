@@ -1,6 +1,6 @@
-use std::collections::HashMap;
-
-use std::rc::Rc;
+use alloc::collections::BTreeMap;
+use alloc::rc::Rc;
+use alloc::vec::Vec;
 
 use crate::bitstream::BitstreamReader;
 use crate::deblock::{self, MbInfo, MbType};
@@ -133,8 +133,8 @@ struct PictureState {
 /// }
 /// ```
 pub struct Decoder {
-    sps_table: HashMap<u32, Sps>,
-    pps_table: HashMap<u32, Pps>,
+    sps_table: BTreeMap<u32, Sps>,
+    pps_table: BTreeMap<u32, Pps>,
     dpb: Dpb,
     /// In-progress picture being assembled from one or more slices.
     pending: Option<PictureState>,
@@ -152,8 +152,8 @@ impl Decoder {
     /// Create a new decoder with empty parameter set tables and DPB.
     pub fn new() -> Self {
         Self {
-            sps_table: HashMap::new(),
-            pps_table: HashMap::new(),
+            sps_table: BTreeMap::new(),
+            pps_table: BTreeMap::new(),
             dpb: Dpb::new(0),
             pending: None,
             pending_field: None,

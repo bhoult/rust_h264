@@ -1,5 +1,7 @@
 //! CAVLC macroblock decode for non-skip MBs.
 
+use alloc::vec::Vec;
+
 use crate::bitstream::BitstreamReader;
 use crate::cavlc::parse_residual_block_cavlc;
 use crate::deblock::{MbInfo, MbType};
