@@ -93,6 +93,8 @@ pub mod pps;
 #[cfg(not(feature = "dev-internals"))]
 #[allow(dead_code)]
 mod pps;
+#[cfg(feature = "profile")]
+pub mod profile;
 // SHA-256 is used by the golden-digest tests and the `bench_decode` example;
 // it is not part of the decoder API.
 #[cfg(feature = "dev-internals")]
