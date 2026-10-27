@@ -162,25 +162,22 @@ fn parse_level(
         }
     }
 
-    let level_code;
-    let level_suffix;
-
-    if level_prefix < 14 {
+    let level_code = if level_prefix < 14 {
         let suffix_len = if suffix_length == 0 && level_prefix == 0 {
             0
         } else {
             suffix_length
         };
-        level_suffix = if suffix_len > 0 {
+        let level_suffix = if suffix_len > 0 {
             reader.read_bits(suffix_len as u8)?
         } else {
             0
         };
-        level_code = (level_prefix << suffix_length) + level_suffix;
+        (level_prefix << suffix_length) + level_suffix
     } else if level_prefix == 14 {
         let suffix_len = if suffix_length == 0 { 4 } else { suffix_length };
-        level_suffix = reader.read_bits(suffix_len as u8)?;
-        level_code = (level_prefix << suffix_length) + level_suffix;
+        let level_suffix = reader.read_bits(suffix_len as u8)?;
+        (level_prefix << suffix_length) + level_suffix
     } else {
         // level_prefix >= 15: levelSuffixSize = level_prefix - 3
         // H.264 spec 9.2.2.1:
@@ -188,7 +185,7 @@ fn parse_level(
         // If level_prefix >= 15 and suffixLength == 0: levelCode += 15
         // If level_prefix > 15: levelCode += (1 << (level_prefix - 3)) - 4096
         let suffix_bits = (level_prefix - 3) as u8;
-        level_suffix = if suffix_bits > 0 {
+        let level_suffix = if suffix_bits > 0 {
             reader.read_bits(suffix_bits)?
         } else {
             0
@@ -201,8 +198,8 @@ fn parse_level(
         if level_prefix > 15 {
             lc += (1 << (level_prefix - 3)) - 4096;
         }
-        level_code = lc;
-    }
+        lc
+    };
 
     let mut level_code = level_code as i32;
 

@@ -97,7 +97,7 @@ jobs:
           {
             echo "## clippy output"
             echo '```'
-            grep -E "^(error|warning)|-->|^\s*= " clippy.log | head -80
+            grep -E "^(error|warning)|-->|^\s*= " clippy.log | head -200
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
         shell: bash

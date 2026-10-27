@@ -484,7 +484,7 @@ pub fn chroma_bilinear_block(
 ) {
     if level() >= SimdLevel::Ssse3 {
         debug_assert!(output.len() >= block_w * block_h);
-        debug_assert!(ref_plane.len() >= top_off + block_h * ref_width + block_w + 1);
+        debug_assert!(ref_plane.len() > top_off + block_h * ref_width + block_w);
         // SAFETY: SSSE3 was detected; the caller guarantees block_h + 1 rows
         // of block_w + 1 bytes are readable from top_off (checked above in
         // debug builds).

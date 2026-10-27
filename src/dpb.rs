@@ -156,7 +156,7 @@ impl Dpb {
             });
         } else {
             // Sort by descending POC as a proxy for recency (handles frame_num wraparound).
-            refs.sort_by(|a, b| b.pic_order_cnt.cmp(&a.pic_order_cnt));
+            refs.sort_by_key(|a| core::cmp::Reverse(a.pic_order_cnt));
         }
         // Append long-term refs sorted by ascending long_term_frame_idx (spec 8.2.4.2.1)
         refs.extend(self.long_term_ref_list());
@@ -185,14 +185,14 @@ impl Dpb {
             .filter(|p| p.pic_order_cnt <= current_poc)
             .cloned()
             .collect();
-        before.sort_by(|a, b| b.pic_order_cnt.cmp(&a.pic_order_cnt)); // descending
+        before.sort_by_key(|a| core::cmp::Reverse(a.pic_order_cnt)); // descending
 
         let mut after: Vec<_> = short_term
             .iter()
             .filter(|p| p.pic_order_cnt > current_poc)
             .cloned()
             .collect();
-        after.sort_by(|a, b| a.pic_order_cnt.cmp(&b.pic_order_cnt)); // ascending
+        after.sort_by_key(|a| a.pic_order_cnt); // ascending
 
         before.extend(after);
 
@@ -228,14 +228,14 @@ impl Dpb {
             .filter(|p| p.pic_order_cnt > current_poc)
             .cloned()
             .collect();
-        after.sort_by(|a, b| a.pic_order_cnt.cmp(&b.pic_order_cnt)); // ascending
+        after.sort_by_key(|a| a.pic_order_cnt); // ascending
 
         let mut before: Vec<_> = short_term
             .iter()
             .filter(|p| p.pic_order_cnt <= current_poc)
             .cloned()
             .collect();
-        before.sort_by(|a, b| b.pic_order_cnt.cmp(&a.pic_order_cnt)); // descending
+        before.sort_by_key(|a| core::cmp::Reverse(a.pic_order_cnt)); // descending
 
         after.extend(before);
 

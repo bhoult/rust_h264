@@ -462,10 +462,9 @@ pub fn chroma_mc(
     }
     // For field-coded MBAFF, the effective height is derived from the available
     // plane data, which may be smaller than the frame chroma height.
-    let ref_height = if ref_width > 0 {
-        ref_height.min(ref_plane.len() / ref_width)
-    } else {
-        ref_height
+    let ref_height = match ref_plane.len().checked_div(ref_width) {
+        Some(rows) => ref_height.min(rows),
+        None => ref_height,
     };
     let frac_x = dx.rem_euclid(8);
     let frac_y = dy.rem_euclid(8);
