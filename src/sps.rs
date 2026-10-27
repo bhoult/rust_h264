@@ -346,28 +346,10 @@ pub fn parse_sps(rbsp: &[u8]) -> Result<Sps, &'static str> {
             time_scale = Some((hi << 16) | lo);
             fixed_frame_rate_flag = r.read_bit()? != 0;
         }
-        let nal_hrd = r.read_bit()? != 0;
-        if nal_hrd {
-            skip_hrd_parameters(&mut r)?;
-        }
-        let vcl_hrd = r.read_bit()? != 0;
-        if vcl_hrd {
-            skip_hrd_parameters(&mut r)?;
-        }
-        if nal_hrd || vcl_hrd {
-            r.skip_bits(1); // low_delay_hrd_flag
-        }
-        r.skip_bits(1); // pic_struct_present_flag
-        if r.read_bit()? != 0 {
-            // bitstream_restriction_flag
-            r.skip_bits(1); // motion_vectors_over_pic_boundaries_flag
-            r.read_ue()?; // max_bytes_per_pic_denom
-            r.read_ue()?; // max_bits_per_mb_denom
-            r.read_ue()?; // log2_max_mv_length_horizontal
-            r.read_ue()?; // log2_max_mv_length_vertical
-            max_num_reorder_frames = Some(r.read_ue()?);
-            r.read_ue()?; // max_dec_frame_buffering
-        }
+        // The remaining VUI fields (HRD, bitstream_restriction) are not
+        // needed for decoding, so a malformed or truncated tail must not
+        // reject an otherwise valid SPS. Parse them best-effort.
+        max_num_reorder_frames = parse_vui_tail(&mut r);
     }
 
     Ok(Sps {
@@ -444,6 +426,52 @@ pub fn parse_scaling_list<const N: usize>(
         last_scale = val;
     }
     Ok(scaling_list)
+}
+
+/// Best-effort parse of the VUI fields after timing_info (spec E.1.1):
+/// HRD parameters, pic_struct_present_flag and bitstream_restriction.
+/// Returns `max_num_reorder_frames` when signalled; any parse failure
+/// yields `None` rather than an error.
+fn parse_vui_tail(r: &mut BitstreamReader) -> Option<u32> {
+    let nal_hrd = r.read_bit().ok()? != 0;
+    if nal_hrd {
+        skip_hrd_parameters(r).ok()?;
+    }
+    let vcl_hrd = r.read_bit().ok()? != 0;
+    if vcl_hrd {
+        skip_hrd_parameters(r).ok()?;
+    }
+    if nal_hrd || vcl_hrd {
+        r.skip_bits(1); // low_delay_hrd_flag
+    }
+    r.skip_bits(1); // pic_struct_present_flag
+    if r.read_bit().ok()? == 0 {
+        return None; // bitstream_restriction_flag
+    }
+    r.skip_bits(1); // motion_vectors_over_pic_boundaries_flag
+    r.read_ue().ok()?; // max_bytes_per_pic_denom
+    r.read_ue().ok()?; // max_bits_per_mb_denom
+    r.read_ue().ok()?; // log2_max_mv_length_horizontal
+    r.read_ue().ok()?; // log2_max_mv_length_vertical
+    let max_num_reorder_frames = r.read_ue().ok()?;
+    r.read_ue().ok()?; // max_dec_frame_buffering
+    Some(max_num_reorder_frames)
+}
+
+// H.264 E.1.2; cpb_cnt_minus1 is bounded by the syntax specification.
+fn skip_hrd_parameters(r: &mut BitstreamReader) -> Result<(), &'static str> {
+    let cpb_count = r.read_ue()?;
+    if cpb_count > 31 {
+        return Err("invalid HRD CPB count");
+    }
+    r.skip_bits(8);
+    for _ in 0..=cpb_count {
+        r.read_ue()?;
+        r.read_ue()?;
+        r.skip_bits(1);
+    }
+    r.skip_bits(20);
+    Ok(())
 }
 
 #[cfg(test)]
@@ -572,20 +600,4 @@ mod tests {
         sps.time_scale = Some(60);
         assert!(sps.frame_rate().is_none());
     }
-}
-
-// H.264 E.1.2; cpb_cnt_minus1 is bounded by the syntax specification.
-fn skip_hrd_parameters(r: &mut BitstreamReader) -> Result<(), &'static str> {
-    let cpb_count = r.read_ue()?;
-    if cpb_count > 31 {
-        return Err("invalid HRD CPB count");
-    }
-    r.skip_bits(8);
-    for _ in 0..=cpb_count {
-        r.read_ue()?;
-        r.read_ue()?;
-        r.skip_bits(1);
-    }
-    r.skip_bits(20);
-    Ok(())
 }

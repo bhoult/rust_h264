@@ -10,8 +10,14 @@ categories = ["multimedia::video"]
 exclude = ["testdata/", "examples/", "fuzz/", "BENCHMARK.md"]
 
 [features]
+# Optional windowed playback example (`cargo run --example play --features minifb`).
+minifb = ["dep:minifb"]
 # Expose internal modules (sps, pps, slice) for debug/diagnostic examples.
 dev-internals = []
+
+[[example]]
+name = "play"
+required-features = ["minifb"]
 
 [[example]]
 name = "check_pps"
@@ -25,5 +31,5 @@ required-features = ["dev-internals"]
 name = "debug_cavlc"
 required-features = ["dev-internals"]
 
-[dev-dependencies]
-minifb = "0.28"
+[dependencies]
+minifb = { version = "0.28", optional = true }
