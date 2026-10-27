@@ -36,8 +36,10 @@ use super::scalar::{self, hv_sample, v_sample};
 
 pub use super::scalar::{weighted_bi, weighted_bi_implicit, weighted_uni};
 
-/// Detected CPU capability level, in ascending order.
+/// Detected CPU capability level, in ascending order. `Scalar` is only
+/// produced by the test-only force-scalar switch.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) enum SimdLevel {
     Scalar,
     Sse2,

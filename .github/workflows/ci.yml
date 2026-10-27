@@ -84,4 +84,20 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: clippy
-        run: cargo clippy --all-targets --features dev-internals -- -D warnings
+        # Mirror the output into the job summary (visible on the public run
+        # page) so lint failures can be read without signing in.
+        run: |
+          set -o pipefail
+          cargo clippy --all-targets --features dev-internals -- -D warnings 2>&1 | tee clippy.log
+        shell: bash
+
+      - name: Publish clippy output to the job summary
+        if: failure()
+        run: |
+          {
+            echo "## clippy output"
+            echo '```'
+            grep -E "^(error|warning)|-->|^\s*= " clippy.log | head -80
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+        shell: bash
