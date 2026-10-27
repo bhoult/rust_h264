@@ -1,16 +1,28 @@
 //! SIMD backend dispatch for motion-compensation kernels.
 //!
-//! Two-layer model: a portable SIMD backend (`portable-simd` feature,
-//! lowering to the target's native SIMD via `core::simd`) and a scalar
-//! reference/fallback. No hand-written arch-specific backend is maintained.
+//! Three backends share one function set, selected at compile time:
+//! - `portable` (`portable-simd` feature, nightly): `core::simd` kernels that
+//!   lower to the target's native SIMD.
+//! - `neon` (aarch64, default): hand-written NEON for the luma half-pel
+//!   filters; everything else falls through to scalar.
+//! - `scalar`: the reference implementation and fallback for all other
+//!   targets.
+//!
+//! All backends must be bit-exact with `scalar`; the golden corpus digest
+//! test below is the gate.
 
+#[cfg(all(target_arch = "aarch64", not(feature = "portable-simd")))]
+mod neon;
 #[cfg(feature = "portable-simd")]
 mod portable;
+#[allow(dead_code)]
 pub(crate) mod scalar;
 
+#[cfg(all(target_arch = "aarch64", not(feature = "portable-simd")))]
+pub use neon::*;
 #[cfg(feature = "portable-simd")]
 pub use portable::*;
-#[cfg(not(feature = "portable-simd"))]
+#[cfg(not(any(target_arch = "aarch64", feature = "portable-simd")))]
 pub use scalar::*;
 
 #[cfg(test)]
@@ -80,9 +92,13 @@ mod tests {
         sha256_hex(&output)
     }
 
+    /// Decodes the full 720p/1080p bench corpus (~67MB of streams) and
+    /// checks the active backend against digests recorded from the scalar
+    /// reference. Too slow for the default run; execute with
+    /// `cargo test --release -- --ignored golden_corpus_digests`.
     #[test]
-    #[cfg(not(feature = "portable-simd"))]
-    fn golden_scalar_corpus_digests() {
+    #[ignore = "slow: decodes the whole bench corpus; run with --release -- --ignored"]
+    fn golden_corpus_digests() {
         for &(name, expected) in GOLDEN_STREAMS {
             assert_eq!(
                 decode_stream_digest(name),

@@ -3,8 +3,9 @@
 //! A standalone, portable software H.264 decoder. Supports Baseline, Main,
 //! and High profile (8-bit 4:2:0 progressive), with both CAVLC and CABAC
 //! entropy coding, B-frames, multi-reference, weighted prediction, long-term
-//! references, and multi-slice frames. Portable SIMD acceleration
-//! (`core::simd`, enabled via the `portable-simd` feature).
+//! references, and multi-slice frames. NEON SIMD acceleration on aarch64,
+//! with an optional `core::simd` backend behind the nightly-only
+//! `portable-simd` feature.
 //!
 //! # Quick start
 //!
@@ -92,7 +93,12 @@ pub mod pps;
 #[cfg(not(feature = "dev-internals"))]
 #[allow(dead_code)]
 mod pps;
+// SHA-256 is used by the golden-digest tests and the `bench_decode` example;
+// it is not part of the decoder API.
+#[cfg(feature = "dev-internals")]
 pub mod sha256;
+#[cfg(all(test, not(feature = "dev-internals")))]
+mod sha256;
 
 #[allow(dead_code)]
 mod residual;

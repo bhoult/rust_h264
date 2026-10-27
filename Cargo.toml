@@ -25,6 +25,10 @@ name = "play"
 required-features = ["minifb"]
 
 [[example]]
+name = "bench_decode"
+required-features = ["dev-internals"]
+
+[[example]]
 name = "check_pps"
 required-features = ["dev-internals"]
 

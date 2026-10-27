@@ -45,6 +45,12 @@ jobs:
       - name: Test
         run: cargo test --release ${{ matrix.args }}
 
+      - name: Golden corpus digests
+        # Decodes the full bench corpus with the active SIMD backend and
+        # compares against scalar-reference digests (ignored by default).
+        if: matrix.name == 'std'
+        run: cargo test --release -- --ignored golden_corpus_digests
+
   no_std_target:
     # Cross-check the library on a real no_std target (no std available at
     # all), which the host no_std test run above cannot prove.

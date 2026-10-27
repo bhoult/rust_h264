@@ -1408,7 +1408,6 @@ impl<M> OrderedDecoder<M> {
 mod tests {
     use super::*;
     use crate::nal::parse_annex_b;
-    use alloc::string::String;
     use std::collections::HashMap;
 
     #[test]
