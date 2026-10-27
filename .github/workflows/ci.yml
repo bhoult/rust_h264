@@ -1,0 +1,83 @@
+name: CI
+
+# Build and test on every push and pull request. Runs the default (std)
+# configuration and the no_std + alloc configuration, so a stray `std::`
+# path fails here instead of for a downstream no_std user.
+on:
+  push:
+  pull_request:
+  workflow_dispatch: {}
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Test (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: std
+            args: ""
+          - name: no_std
+            args: --no-default-features
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry & build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ci-${{ matrix.name }}-${{ runner.os }}-${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
+          restore-keys: |
+            ci-${{ matrix.name }}-${{ runner.os }}-
+
+      - name: Test
+        run: cargo test --release ${{ matrix.args }}
+
+  no_std_target:
+    # Cross-check the library on a real no_std target (no std available at
+    # all), which the host no_std test run above cannot prove.
+    name: Check no_std target (thumbv7em-none-eabi)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install stable toolchain with embedded target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: thumbv7em-none-eabi
+
+      - name: Check library without std
+        run: cargo check --lib --no-default-features --target thumbv7em-none-eabi
+
+  lint:
+    name: Format and clippy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: rustfmt
+        run: cargo fmt --all -- --check
+
+      - name: clippy
+        # Warnings are reported but not fatal: the tree carries a few
+        # pre-existing ones. Tighten to `-D warnings` once they are cleared.
+        run: cargo clippy --all-targets
