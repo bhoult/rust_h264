@@ -1,10 +1,13 @@
 //! SIMD backend dispatch for motion-compensation kernels.
 //!
-//! Three backends share one function set, selected at compile time:
+//! Four backends share one function set, selected at compile time:
 //! - `portable` (`portable-simd` feature, nightly): `core::simd` kernels that
 //!   lower to the target's native SIMD.
 //! - `neon` (aarch64, default): hand-written NEON for the luma half-pel
 //!   filters; everything else falls through to scalar.
+//! - `x86` (x86_64, default): SSE2 baseline with runtime-detected SSSE3 /
+//!   AVX2 / AVX-512 tiers (detection needs the `std` feature; without it
+//!   the SSE2 baseline is used).
 //! - `scalar`: the reference implementation and fallback for all other
 //!   targets.
 //!
@@ -17,13 +20,21 @@ mod neon;
 mod portable;
 #[allow(dead_code)]
 pub(crate) mod scalar;
+#[cfg(all(target_arch = "x86_64", not(feature = "portable-simd")))]
+mod x86;
 
 #[cfg(all(target_arch = "aarch64", not(feature = "portable-simd")))]
 pub use neon::*;
 #[cfg(feature = "portable-simd")]
 pub use portable::*;
-#[cfg(not(any(target_arch = "aarch64", feature = "portable-simd")))]
+#[cfg(not(any(
+    target_arch = "aarch64",
+    target_arch = "x86_64",
+    feature = "portable-simd"
+)))]
 pub use scalar::*;
+#[cfg(all(target_arch = "x86_64", not(feature = "portable-simd")))]
+pub use x86::*;
 
 #[cfg(test)]
 mod tests {

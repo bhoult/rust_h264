@@ -10,8 +10,8 @@ use core::arch::aarch64::*;
 use crate::inter_pred::{avg, clip_u8, fir6};
 
 pub use super::scalar::{
-    bi_pred_avg, chroma_bilinear_block, row_half_pel_hv, weighted_bi, weighted_bi_implicit,
-    weighted_uni,
+    bi_pred_avg, chroma_bilinear_block, row_avg_h_hv, row_avg_h_int, row_avg_int_h, row_avg_v_hv,
+    row_half_pel_hv, weighted_bi, weighted_bi_implicit, weighted_uni,
 };
 
 /// 6-tap FIR of six u8x8 vectors, rounded and clipped to u8x8:

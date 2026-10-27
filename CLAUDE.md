@@ -45,7 +45,7 @@ The decoder logic is split across several files for maintainability:
 | `src/slice_context.rs` | ~920 | `SliceContext`/`SliceParams` structs + shared methods (skip, direct, reconstruct) |
 | `src/mv_pred.rs` | ~940 | MV prediction, spatial/temporal direct mode derivation |
 | `src/neighbor.rs` | ~470 | CABAC neighbor context helpers, nC computation, dequant helpers |
-| `src/simd/` | ~450 | Motion-compensation kernel backends: `scalar.rs` (reference), `neon.rs` (aarch64 default), `portable.rs` (`core::simd`, nightly `portable-simd` feature). `mod.rs` selects one at compile time; all must be bit-exact with scalar |
+| `src/simd/` | ~450 | Motion-compensation kernel backends: `scalar.rs` (reference), `neon.rs` (aarch64 default), `x86.rs` (x86_64 default, SSE2 + runtime SSSE3/AVX2/AVX-512), `portable.rs` (`core::simd`, nightly `portable-simd` feature). `mod.rs` selects one at compile time; all must be bit-exact with scalar |
 
 `SliceContext` bundles ~25 mutable per-MB arrays; `SliceParams` bundles read-only slice-level parameters. The `make_ctx!()` macro in `decoder.rs` constructs a `SliceContext` from local variables at each call site for zero-cost method dispatch.
 

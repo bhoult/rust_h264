@@ -77,6 +77,63 @@ pub fn row_avg_h_v(src_h: &[u8], rows_v: [&[u8]; 6], out: &mut [u8], w: usize) {
     }
 }
 
+/// Quarter-pel `avg(integer_row, h_half_pel)` (arm (1,0)).
+pub fn row_avg_int_h(int_row: &[u8], src_h: &[u8], out: &mut [u8], w: usize) {
+    for i in 0..w {
+        let hp = clip_u8((fir6(src_h, i) + 16) >> 5);
+        out[i] = avg(int_row[i], hp);
+    }
+}
+
+/// Quarter-pel `avg(h_half_pel, integer_row)` (arm (3,0), integer row at +1).
+pub fn row_avg_h_int(src_h: &[u8], int_row: &[u8], out: &mut [u8], w: usize) {
+    for i in 0..w {
+        let hp = clip_u8((fir6(src_h, i) + 16) >> 5);
+        out[i] = avg(hp, int_row[i]);
+    }
+}
+
+/// Diagonal half-pel sample at column `i`: horizontal 6-tap on each of the
+/// six rows (each with `w + 5` bytes), then vertical 6-tap, `(v + 512) >> 10`.
+#[inline(always)]
+pub(crate) fn hv_sample(rows_hv: &[&[u8]; 6], i: usize) -> u8 {
+    let v = fir6_i32(
+        fir6(rows_hv[0], i),
+        fir6(rows_hv[1], i),
+        fir6(rows_hv[2], i),
+        fir6(rows_hv[3], i),
+        fir6(rows_hv[4], i),
+        fir6(rows_hv[5], i),
+    );
+    clip_u8((v + 512) >> 10)
+}
+
+/// Vertical half-pel sample at column `i` from six rows of `w` bytes.
+#[inline(always)]
+pub(crate) fn v_sample(rows: &[&[u8]; 6], i: usize) -> u8 {
+    let val =
+        rows[0][i] as i32 - 5 * rows[1][i] as i32 + 20 * rows[2][i] as i32 + 20 * rows[3][i] as i32
+            - 5 * rows[4][i] as i32
+            + rows[5][i] as i32;
+    clip_u8((val + 16) >> 5)
+}
+
+/// Quarter-pel `avg(h_half_pel, hv_half_pel)` (arms (2,1) and (2,3); avg is
+/// symmetric so operand order does not matter).
+pub fn row_avg_h_hv(src_h: &[u8], rows_hv: [&[u8]; 6], out: &mut [u8], w: usize) {
+    for (i, o) in out.iter_mut().enumerate().take(w) {
+        let hp = clip_u8((fir6(src_h, i) + 16) >> 5);
+        *o = avg(hp, hv_sample(&rows_hv, i));
+    }
+}
+
+/// Quarter-pel `avg(v_half_pel, hv_half_pel)` (arms (1,2) and (3,2)).
+pub fn row_avg_v_hv(rows_v: [&[u8]; 6], rows_hv: [&[u8]; 6], out: &mut [u8], w: usize) {
+    for (i, o) in out.iter_mut().enumerate().take(w) {
+        *o = avg(v_sample(&rows_v, i), hv_sample(&rows_hv, i));
+    }
+}
+
 /// Chroma bilinear interpolation for an in-bounds block.
 #[allow(clippy::too_many_arguments)]
 pub fn chroma_bilinear_block(

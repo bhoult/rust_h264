@@ -337,10 +337,7 @@ fn luma_mc_inner(
             for r in 0..h {
                 let int_row = row(r as isize, 0, w);
                 let src_h = row(r as isize, -2, w + 5);
-                for i in 0..w {
-                    let hp = clip_u8((fir6(src_h, i) + 16) >> 5);
-                    output[r * w + i] = avg(int_row[i], hp);
-                }
+                crate::simd::row_avg_int_h(int_row, src_h, &mut output[r * w..], w);
             }
         }
         (3, 0) => {
@@ -348,10 +345,7 @@ fn luma_mc_inner(
             for r in 0..h {
                 let int_row = row(r as isize, 1, w);
                 let src_h = row(r as isize, -2, w + 5);
-                for i in 0..w {
-                    let hp = clip_u8((fir6(src_h, i) + 16) >> 5);
-                    output[r * w + i] = avg(hp, int_row[i]);
-                }
+                crate::simd::row_avg_h_int(src_h, int_row, &mut output[r * w..], w);
             }
         }
         (0, 1) => {
@@ -375,17 +369,7 @@ fn luma_mc_inner(
             for r in 0..h {
                 let src_h = row(r as isize, -2, w + 5);
                 let rows_hv = vrows(-2, r as isize, w + 5);
-                for i in 0..w {
-                    let h_val = clip_u8((fir6(src_h, i) + 16) >> 5);
-                    let h0 = fir6(rows_hv[0], i);
-                    let h1 = fir6(rows_hv[1], i);
-                    let h2 = fir6(rows_hv[2], i);
-                    let h3 = fir6(rows_hv[3], i);
-                    let h4 = fir6(rows_hv[4], i);
-                    let h5 = fir6(rows_hv[5], i);
-                    let hv_val = clip_u8((fir6_i32(h0, h1, h2, h3, h4, h5) + 512) >> 10);
-                    output[r * w + i] = avg(h_val, hv_val);
-                }
+                crate::simd::row_avg_h_hv(src_h, rows_hv, &mut output[r * w..], w);
             }
         }
         (2, 3) => {
@@ -393,21 +377,7 @@ fn luma_mc_inner(
             for r in 0..h {
                 let src_h = row(r as isize + 1, -2, w + 5);
                 let rows_hv = vrows(-2, r as isize, w + 5);
-                for i in 0..w {
-                    let hv_val = clip_u8(
-                        (fir6_i32(
-                            fir6(rows_hv[0], i),
-                            fir6(rows_hv[1], i),
-                            fir6(rows_hv[2], i),
-                            fir6(rows_hv[3], i),
-                            fir6(rows_hv[4], i),
-                            fir6(rows_hv[5], i),
-                        ) + 512)
-                            >> 10,
-                    );
-                    let h_val = clip_u8((fir6(src_h, i) + 16) >> 5);
-                    output[r * w + i] = avg(hv_val, h_val);
-                }
+                crate::simd::row_avg_h_hv(src_h, rows_hv, &mut output[r * w..], w);
             }
         }
         (1, 2) => {
@@ -415,29 +385,7 @@ fn luma_mc_inner(
             for r in 0..h {
                 let rows_v = vrows(0, r as isize, w);
                 let rows_hv = vrows(-2, r as isize, w + 5);
-                for i in 0..w {
-                    let v_val = clip_u8(
-                        (rows_v[0][i] as i32 - 5 * rows_v[1][i] as i32
-                            + 20 * rows_v[2][i] as i32
-                            + 20 * rows_v[3][i] as i32
-                            - 5 * rows_v[4][i] as i32
-                            + rows_v[5][i] as i32
-                            + 16)
-                            >> 5,
-                    );
-                    let hv_val = clip_u8(
-                        (fir6_i32(
-                            fir6(rows_hv[0], i),
-                            fir6(rows_hv[1], i),
-                            fir6(rows_hv[2], i),
-                            fir6(rows_hv[3], i),
-                            fir6(rows_hv[4], i),
-                            fir6(rows_hv[5], i),
-                        ) + 512)
-                            >> 10,
-                    );
-                    output[r * w + i] = avg(v_val, hv_val);
-                }
+                crate::simd::row_avg_v_hv(rows_v, rows_hv, &mut output[r * w..], w);
             }
         }
         (3, 2) => {
@@ -445,29 +393,7 @@ fn luma_mc_inner(
             for r in 0..h {
                 let rows_v = vrows(1, r as isize, w);
                 let rows_hv = vrows(-2, r as isize, w + 5);
-                for i in 0..w {
-                    let hv_val = clip_u8(
-                        (fir6_i32(
-                            fir6(rows_hv[0], i),
-                            fir6(rows_hv[1], i),
-                            fir6(rows_hv[2], i),
-                            fir6(rows_hv[3], i),
-                            fir6(rows_hv[4], i),
-                            fir6(rows_hv[5], i),
-                        ) + 512)
-                            >> 10,
-                    );
-                    let v_val = clip_u8(
-                        (rows_v[0][i] as i32 - 5 * rows_v[1][i] as i32
-                            + 20 * rows_v[2][i] as i32
-                            + 20 * rows_v[3][i] as i32
-                            - 5 * rows_v[4][i] as i32
-                            + rows_v[5][i] as i32
-                            + 16)
-                            >> 5,
-                    );
-                    output[r * w + i] = avg(hv_val, v_val);
-                }
+                crate::simd::row_avg_v_hv(rows_v, rows_hv, &mut output[r * w..], w);
             }
         }
         (1, 1) => {
