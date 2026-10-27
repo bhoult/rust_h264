@@ -287,18 +287,57 @@ fn profile_main() {
         phase_elapsed.as_secs_f64() * 1000.0,
         phase_frames as f64 / phase_elapsed.as_secs_f64()
     );
+    // Phases nest (see profile.rs). Top-level phases are the children of
+    // decode_nal_total; anything decode_nal_total covers that they do not is
+    // reported as "unaccounted". Nested phases are indented and excluded
+    // from that sum.
     println!("phase timing:");
-    println!("phase | us | percent_of_wall");
-    println!("--- | ---: | ---:");
+    println!(
+        "(motion_comp is timed per MC call, down to 4x4 blocks, so timer overhead \
+         inflates it; use the sampled flamegraph for its true share)"
+    );
+    println!("phase | us | percent_of_wall | percent_of_decode_nal");
+    println!("--- | ---: | ---: | ---:");
     let wall_us = phase_elapsed.as_micros() as f64;
-    for sample in phase_samples {
-        let percent = if wall_us > 0.0 {
-            sample.micros as f64 * 100.0 / wall_us
+    let total_us = phase_samples
+        .iter()
+        .find(|s| s.name == "decode_nal_total")
+        .map(|s| s.micros)
+        .unwrap_or(0);
+    let pct = |us: u64, denom: f64| {
+        if denom > 0.0 {
+            us as f64 * 100.0 / denom
         } else {
             0.0
+        }
+    };
+    let mut top_level_sum = 0u64;
+    for sample in phase_samples {
+        let indent = match sample.parent {
+            None => "",
+            Some("decode_nal_total") => {
+                top_level_sum += sample.micros;
+                "  "
+            }
+            Some("mb_loop") => "    ",
+            Some(_) => "      ",
         };
-        println!("{} | {} | {:.2}%", sample.name, sample.micros, percent);
+        println!(
+            "{}{} | {} | {:.2}% | {:.2}%",
+            indent,
+            sample.name,
+            sample.micros,
+            pct(sample.micros, wall_us),
+            pct(sample.micros, total_us as f64)
+        );
     }
+    let unaccounted = total_us.saturating_sub(top_level_sum);
+    println!(
+        "  unaccounted | {} | {:.2}% | {:.2}%",
+        unaccounted,
+        pct(unaccounted, wall_us),
+        pct(unaccounted, total_us as f64)
+    );
     println!("top self-time functions:");
     println!("rank | samples | percent | function");
     println!("---: | ---: | ---: | ---");

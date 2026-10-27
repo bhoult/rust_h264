@@ -1,26 +1,67 @@
+//! Coarse phase timers for the `profile` feature.
+//!
+//! Timers nest: `DecodeNal` wraps everything a `decode_nal` call does, so
+//! the other phases should sum to roughly its total. The MB-level phases
+//! (`MbDecode`, `MotionComp`) are inside `MbLoop`; the gap between `MbLoop`
+//! and `MbDecode` is per-MB bookkeeping plus the timers' own overhead.
+
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 #[derive(Clone, Copy)]
 pub enum Phase {
+    /// Whole `Decoder::decode_nal` call (outermost; includes everything below).
+    DecodeNal,
+    /// `decode_slice` before the MB loop: slice header, reference list
+    /// construction, `PictureState` allocation, entropy decoder init.
+    SliceSetup,
+    /// The whole MB loop of `decode_slice`.
+    MbLoop,
+    /// Per-MB entropy decode + reconstruction (inside `MbLoop`).
     MbDecode,
+    /// Luma/chroma motion compensation (inside `MbDecode`). Timed per MC
+    /// call, which can be as small as one 4x4 block, so the two clock reads
+    /// per call inflate this phase noticeably; prefer the sampled
+    /// flamegraph for its true share.
     MotionComp,
-    Deblock,
-    DpbFinalize,
+    /// `finalize_mb_info` after the MB loop.
     FinalizeMbInfo,
+    /// Deblocking filter in `finalize_pending`.
+    Deblock,
+    /// MMCO + DPB insert in `finalize_pending`, including the plane copies.
+    DpbFinalize,
+    /// Crop to display size / field-pair interleave in `finalize_pending`.
+    Output,
 }
+
+const PHASE_COUNT: usize = 9;
+
+/// `(name, parent)`: parent names the phase this one is nested inside, so a
+/// reporter can avoid double counting.
+const PHASE_INFO: [(&str, Option<&str>); PHASE_COUNT] = [
+    ("decode_nal_total", None),
+    ("slice_setup", Some("decode_nal_total")),
+    ("mb_loop", Some("decode_nal_total")),
+    ("mb_decode", Some("mb_loop")),
+    ("motion_comp", Some("mb_decode")),
+    ("finalize_mb_info", Some("decode_nal_total")),
+    ("deblock", Some("decode_nal_total")),
+    ("dpb_finalize", Some("decode_nal_total")),
+    ("output_crop", Some("decode_nal_total")),
+];
 
 #[derive(Clone, Copy)]
 pub struct PhaseSample {
     pub name: &'static str,
+    /// Name of the enclosing phase, if this one is nested.
+    pub parent: Option<&'static str>,
     pub micros: u64,
 }
 
-static MB_DECODE_US: AtomicU64 = AtomicU64::new(0);
-static MOTION_COMP_US: AtomicU64 = AtomicU64::new(0);
-static DEBLOCK_US: AtomicU64 = AtomicU64::new(0);
-static DPB_FINALIZE_US: AtomicU64 = AtomicU64::new(0);
-static FINALIZE_MB_INFO_US: AtomicU64 = AtomicU64::new(0);
+// Accumulated in nanoseconds: per-MB intervals are well under a microsecond,
+// so truncating each one to microseconds before summing would discard most
+// of the MB-level time.
+static TOTALS_NS: [AtomicU64; PHASE_COUNT] = [const { AtomicU64::new(0) }; PHASE_COUNT];
 static ENABLED: AtomicBool = AtomicBool::new(false);
 
 pub struct PhaseTimer {
@@ -52,46 +93,29 @@ pub fn set_enabled(enabled: bool) {
 }
 
 pub fn reset() {
-    MB_DECODE_US.store(0, Ordering::Relaxed);
-    MOTION_COMP_US.store(0, Ordering::Relaxed);
-    DEBLOCK_US.store(0, Ordering::Relaxed);
-    DPB_FINALIZE_US.store(0, Ordering::Relaxed);
-    FINALIZE_MB_INFO_US.store(0, Ordering::Relaxed);
+    for t in &TOTALS_NS {
+        t.store(0, Ordering::Relaxed);
+    }
 }
 
-pub fn snapshot() -> [PhaseSample; 5] {
-    [
-        PhaseSample {
-            name: "mb_decode_total",
-            micros: MB_DECODE_US.load(Ordering::Relaxed),
-        },
-        PhaseSample {
-            name: "motion_comp",
-            micros: MOTION_COMP_US.load(Ordering::Relaxed),
-        },
-        PhaseSample {
-            name: "deblock",
-            micros: DEBLOCK_US.load(Ordering::Relaxed),
-        },
-        PhaseSample {
-            name: "dpb_finalize",
-            micros: DPB_FINALIZE_US.load(Ordering::Relaxed),
-        },
-        PhaseSample {
-            name: "finalize_mb_info",
-            micros: FINALIZE_MB_INFO_US.load(Ordering::Relaxed),
-        },
-    ]
+pub fn snapshot() -> [PhaseSample; PHASE_COUNT] {
+    let mut out = [PhaseSample {
+        name: "",
+        parent: None,
+        micros: 0,
+    }; PHASE_COUNT];
+    for (i, (name, parent)) in PHASE_INFO.iter().enumerate() {
+        out[i] = PhaseSample {
+            name,
+            parent: *parent,
+            micros: TOTALS_NS[i].load(Ordering::Relaxed) / 1000,
+        };
+    }
+    out
 }
 
 #[inline]
 fn add_duration(phase: Phase, duration: Duration) {
-    let micros = duration.as_micros().min(u128::from(u64::MAX)) as u64;
-    match phase {
-        Phase::MbDecode => MB_DECODE_US.fetch_add(micros, Ordering::Relaxed),
-        Phase::MotionComp => MOTION_COMP_US.fetch_add(micros, Ordering::Relaxed),
-        Phase::Deblock => DEBLOCK_US.fetch_add(micros, Ordering::Relaxed),
-        Phase::DpbFinalize => DPB_FINALIZE_US.fetch_add(micros, Ordering::Relaxed),
-        Phase::FinalizeMbInfo => FINALIZE_MB_INFO_US.fetch_add(micros, Ordering::Relaxed),
-    };
+    let nanos = duration.as_nanos().min(u128::from(u64::MAX)) as u64;
+    TOTALS_NS[phase as usize].fetch_add(nanos, Ordering::Relaxed);
 }

@@ -174,6 +174,8 @@ impl Decoder {
     /// Call [`flush`](Self::flush) after the last NAL to retrieve any
     /// remaining buffered frame.
     pub fn decode_nal(&mut self, nal: &NalUnit) -> Result<Option<Frame>, DecodeError> {
+        #[cfg(feature = "profile")]
+        let _profile_timer = crate::profile::PhaseTimer::start(crate::profile::Phase::DecodeNal);
         match nal.nal_unit_type {
             NalUnitType::Sps => {
                 let sps = parse_sps(&nal.rbsp)?;
@@ -397,6 +399,9 @@ impl Decoder {
             }
         }
 
+        #[cfg(feature = "profile")]
+        let _output_timer = crate::profile::PhaseTimer::start(crate::profile::Phase::Output);
+
         // Crop frame from coded dimensions (MB-aligned) to display dimensions
         let coded_w = (ps.mb_width * 16) as usize;
         if coded_w == 0 {
@@ -513,6 +518,10 @@ impl Decoder {
     }
 
     fn decode_slice(&mut self, nal: &NalUnit) -> Result<(), DecodeError> {
+        // Covers everything before the MB loop: header parse, ref lists,
+        // PictureState allocation, entropy decoder init.
+        #[cfg(feature = "profile")]
+        let setup_timer = crate::profile::PhaseTimer::start(crate::profile::Phase::SliceSetup);
         let pps = self
             .pps_table
             .values()
@@ -928,6 +937,10 @@ impl Decoder {
         if mb_idx >= total_mbs {
             return Err(DecodeError::InvalidSyntax("first_mb_in_slice out of range"));
         }
+        #[cfg(feature = "profile")]
+        drop(setup_timer);
+        #[cfg(feature = "profile")]
+        let loop_timer = crate::profile::PhaseTimer::start(crate::profile::Phase::MbLoop);
         while mb_idx < total_mbs {
             // CAVLC end-of-slice: check before reading any new syntax elements.
             // Skip this check when counting down a skip run (no reads needed).
@@ -1070,6 +1083,8 @@ impl Decoder {
         } else {
             header.first_mb_in_slice as usize
         };
+        #[cfg(feature = "profile")]
+        drop(loop_timer);
         {
             #[cfg(feature = "profile")]
             let _profile_timer =
