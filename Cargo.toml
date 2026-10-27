@@ -17,7 +17,9 @@ std = []
 portable-simd = []
 # Optional windowed playback example (`cargo run --example play --features minifb`).
 minifb = ["dep:minifb"]
-profile = ["dep:pprof"]
+# pprof sampling + phase timers for `bench_decode` (see `profile.rs`).
+# Needs std (timers) and dev-internals (the example's sha256 digest).
+profile = ["std", "dev-internals", "dep:pprof"]
 # Expose internal modules (sps, pps, slice) for debug/diagnostic examples.
 dev-internals = []
 
