@@ -49,7 +49,7 @@ fn analyze_file(name: &str) {
 
         if mb_type == 0 {
             println!("  I4x4 macroblock");
-        } else if mb_type >= 1 && mb_type <= 24 {
+        } else if (1..=24).contains(&mb_type) {
             let mt = mb_type - 1;
             println!(
                 "  I16x16 macroblock: pred_mode={}, cbp_chroma={}, cbp_luma={}",

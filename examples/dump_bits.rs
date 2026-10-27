@@ -60,5 +60,5 @@ fn main() {
     // Starting from (3, 7), first bit is byte 3 bit 0 = LSB
     let byte3 = idr.rbsp[3];
     println!("Byte 3: 0x{:02x} = {:08b}", byte3, byte3);
-    println!("Bit 7 of byte 3 (our start): {}", (byte3 >> 0) & 1);
+    println!("Bit 7 of byte 3 (our start): {}", byte3 & 1);
 }

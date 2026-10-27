@@ -84,6 +84,4 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: clippy
-        # Warnings are reported but not fatal: the tree carries a few
-        # pre-existing ones. Tighten to `-D warnings` once they are cleared.
-        run: cargo clippy --all-targets
+        run: cargo clippy --all-targets --features dev-internals -- -D warnings

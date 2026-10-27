@@ -731,12 +731,8 @@ mod tests {
         // 16x1 reference: known values for 6-tap filter
         let mut y = vec![128u8; 16];
         // Set a step edge: left half = 0, right half = 255
-        for c in 0..8 {
-            y[c] = 0;
-        }
-        for c in 8..16 {
-            y[c] = 255;
-        }
+        y[..8].fill(0);
+        y[8..].fill(255);
         let pic = make_ref_pic(16, 1, y);
 
         // Half-pel horizontal at x=7 (the edge): MV dx=2 (half-pel), dy=0
@@ -752,9 +748,7 @@ mod tests {
     fn test_half_pel_vertical() {
         // 1x16 reference with step edge at row 8
         let mut y = vec![0u8; 16];
-        for r in 8..16 {
-            y[r] = 255;
-        }
+        y[8..].fill(255);
         let pic = make_ref_pic(1, 16, y);
 
         let mut out = [0u8; 1];

@@ -1047,7 +1047,7 @@ mod tests {
     #[test]
     fn test_mlps_state_transitions() {
         // LPS transition from state 0 should go to state 2
-        assert_eq!(MLPS_STATE[128 + 0], 2);
+        assert_eq!(MLPS_STATE[128], 2);
         // MPS transition from state 126 should go to state 126
         assert_eq!(MLPS_STATE[128 + 126], 126);
         assert_eq!(MLPS_STATE[128 + 127], 127);
