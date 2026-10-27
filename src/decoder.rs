@@ -99,6 +99,8 @@ struct PictureState {
     bottom_field_flag: bool,
     /// Full frame height (needed for field picture output combining).
     frame_height: u32,
+    /// MaxFrameNum from the SPS, for the picture numbers MMCO commands give.
+    max_frame_num: u32,
 }
 
 /// Streaming H.264 decoder.
@@ -324,12 +326,23 @@ impl Decoder {
             } else {
                 ps.frame_num as i32
             };
+            // A command names a picture by PicNum, counted back from CurrPicNum
+            // (spec 8.2.5.4.1), negative for a frame once frame_num has wrapped.
+            // Field pictures keep their previous mapping.
+            let frame_num_of = |pic_num: i32| -> u32 {
+                if ps.field_pic_flag {
+                    pic_num as u32
+                } else {
+                    Dpb::frame_num_for_pic_num(pic_num, ps.max_frame_num)
+                }
+            };
             let mut has_mmco5 = false;
             for &(op, param) in &ps.mmco_ops {
                 match op {
                     1 => {
                         let pic_num_to_remove = mmco_curr_pic_num - ((param & 0xFFFF) as i32 + 1);
-                        self.dpb.mark_short_term_unused(pic_num_to_remove as u32);
+                        self.dpb
+                            .mark_short_term_unused(frame_num_of(pic_num_to_remove));
                     }
                     2 => {
                         self.dpb.mark_long_term_unused(param);
@@ -339,7 +352,7 @@ impl Decoder {
                         let long_term_frame_idx = param >> 16;
                         let pic_num = mmco_curr_pic_num - (abs_diff_minus1 as i32 + 1);
                         self.dpb
-                            .assign_long_term(pic_num as u32, long_term_frame_idx);
+                            .assign_long_term(frame_num_of(pic_num), long_term_frame_idx);
                     }
                     4 => {
                         self.dpb.set_max_long_term_frame_idx(param);
@@ -772,6 +785,7 @@ impl Decoder {
                 field_pic_flag: header.field_pic_flag,
                 bottom_field_flag: header.bottom_field_flag,
                 frame_height,
+                max_frame_num: 1u32 << (sps.log2_max_frame_num_minus4 + 4).min(31),
             }
         };
 
@@ -818,6 +832,7 @@ impl Decoder {
             field_pic_flag: _ps_field,
             bottom_field_flag: _ps_bottom,
             frame_height: _ps_frame_height,
+            max_frame_num,
         } = ps;
 
         // Increment slice ID for continuation slices so boundary checks work
@@ -1147,6 +1162,7 @@ impl Decoder {
             field_pic_flag: header.field_pic_flag,
             bottom_field_flag: header.bottom_field_flag,
             frame_height,
+            max_frame_num,
         });
 
         Ok(())
