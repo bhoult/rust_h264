@@ -298,3 +298,84 @@ Now measured at **112 fps (1080p)** and **254-390 fps (720p)** on realistic
 **720p** is **8.5x realtime** at 30fps (254 fps with B-frames).
 **1080p** is **3.7x realtime** at 30fps (112 fps), **1.9x at 60fps**.
 Items 7-9 would increase 1080p headroom to ~150+ fps.
+
+## x86-64 results (Windows, SIMD + frame threading) — from PR #1
+
+Numbers reported by the author of PR #1 (codepaws), measured on their
+branch. The x86-64 SIMD kernels are being ported to trunk; the frame-threaded
+`ThreadedDecoder` is not in trunk yet.
+
+Test machine: x86-64 desktop, rustc 1.95, `cargo build --release` (default
+`target-cpu`, no `native`). Streams as above (`testsrc2`, x264 preset
+medium, no-deblock). `--threads N` uses `ThreadedDecoder`; `threads=1` is
+`OrderedDecoder`.
+
+### Throughput (best of 3)
+
+| Stream | scalar (pre-SIMD) | SIMD, 1 thread | SIMD, 2 threads | SIMD, 4 threads | SIMD, 8 threads |
+|--------|------------------:|---------------:|----------------:|----------------:|----------------:|
+| 1080p B-frames (100f) | 74 fps | 83 fps | 93 fps | **122 fps** | 121 fps |
+| 720p B-frames (300f)  | 196 fps | 227 fps | — | **331 fps** | — |
+| 720p P-only (300f)    | 312 fps | 318 fps | — | 339 fps | — |
+
+- **SIMD alone: ~8-9%** end-to-end, even though the hand kernels are
+  6.6-8.5x faster than true scalar in microbenchmarks. The reason: LLVM
+  already auto-vectorizes the row-based scalar loops with SSE2 at the
+  x86-64 baseline (optimization #9 restructured them for exactly that), so
+  the hand-written SSE2 mostly matches what the compiler emitted. Gains
+  beyond auto-vec require instructions the compiler cannot use in generic
+  builds (SSSE3 `pmaddubsw` chroma, AVX2/AVX-512 `pavgb` bi-pred, which
+  are gated at runtime).
+- **Frame threading: 1.46-1.47x at 4 threads** on B-frame content, and
+  ~1x on P-only chains — P-pictures reference their immediate
+  predecessor, so the dependency chain serializes regardless of thread
+  count. This matches the structure FFmpeg's frame-threaded decoder
+  exploits; row-level reference synchronization (decoding a dependent
+  picture before its reference is fully finished) is future work.
+- Combined effect vs the scalar single-threaded baseline on this machine:
+  **74 -> 122 fps at 1080p (1.65x)**.
+
+## Deblocking ON + x86-64 FFmpeg baseline (Windows, same machine) — from PR #1
+
+The streams above disable the in-loop deblocking filter
+(`--no-deblock`). Real content (including PS5 cutscenes) uses it, and
+deblocking has no SIMD yet. Streams regenerated without `no-deblock`
+(`testdata/deb_*.h264`, regenerable with the commands below; not
+committed):
+
+```bash
+ffmpeg -f lavfi -i "testsrc2=s=1920x1080:rate=30:duration=3.33" -frames:v 100   -c:v libx264 -preset medium -crf 23 -x264opts "bframes=3:ref=2" -f h264 deb_1080p_100f.h264
+ffmpeg -f lavfi -i "testsrc2=s=1280x720:rate=30:duration=10" -frames:v 300   -c:v libx264 -preset medium -crf 23 -x264opts "bframes=3:ref=4" -f h264 deb_720p_300f_bframes.h264
+ffmpeg -f lavfi -i "testsrc2=s=1280x720:rate=30:duration=10" -frames:v 300   -c:v libx264 -preset medium -crf 23 -x264opts "bframes=0:ref=1" -f h264 deb_720p_300f_ponly.h264
+```
+
+| Stream | rust_h264 1t | rust_h264 4t | FFmpeg `-threads 1` | FFmpeg / rust_h264 4t |
+|--------|-------------:|-------------:|--------------------:|----------------------:|
+| 1080p B + deblock | 70 fps | 95 fps | 321 fps | 3.4x |
+| 720p B + deblock  | 159 fps | 241 fps | 620 fps | 2.6x |
+| 720p P + deblock  | 262 fps | 233 fps | 800 fps | 3.4x |
+
+- Deblocking costs **16-30% single-threaded** (83->70, 227->159, 318->262).
+- With deblocking, the 4-thread P-only case is **slower** than 1 thread:
+  deblock runs on the worker but sits on the critical path between
+  chained P-pictures (each waits for its reference's full commit), so
+  threading only adds overhead there. Row-level reference sync is the
+  structural fix.
+- **FFmpeg single-threaded is 2.6-3.4x faster than our best threaded
+  result on this machine** — the x86 gap is larger than the 2.6-4x
+  single-threaded gap on the original author's Mac. The remaining gap
+  maps to: deblock SIMD, IDCT/intra-pred SIMD, block-fused MC (per-row
+  function dispatch overhead), and row-level threading.
+
+## FFmpeg byte-exactness on real content
+
+`tools/verify_vs_ffmpeg.py` compares our output byte-for-byte against
+FFmpeg on any `.h264` or container input (the H.264 track is extracted
+with a bitstream copy, so both decoders see identical Annex-B input):
+
+```bash
+python3 tools/verify_vs_ffmpeg.py clip.mp4 stream.h264
+```
+
+Requires `ffmpeg` and `ffprobe` on PATH. On mismatch it reports the first
+differing byte offset and exits non-zero.
