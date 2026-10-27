@@ -606,6 +606,7 @@ impl Decoder {
         };
 
         // Apply ref_pic_list_modification (spec 8.2.4.3)
+        let short_term = self.dpb.short_term_refs();
         if is_p_slice && !header.ref_list_mod_l0.is_empty() {
             Dpb::apply_ref_list_modification(
                 &mut ref_pic_list,
@@ -614,6 +615,7 @@ impl Decoder {
                 max_pic_num,
                 is_field_pic,
                 header.bottom_field_flag,
+                &short_term,
             );
         }
         if is_b_slice && !header.ref_list_mod_l0.is_empty() {
@@ -624,6 +626,7 @@ impl Decoder {
                 max_pic_num,
                 is_field_pic,
                 header.bottom_field_flag,
+                &short_term,
             );
         }
         if is_b_slice && !header.ref_list_mod_l1.is_empty() {
@@ -634,6 +637,7 @@ impl Decoder {
                 max_pic_num,
                 is_field_pic,
                 header.bottom_field_flag,
+                &short_term,
             );
         }
 
