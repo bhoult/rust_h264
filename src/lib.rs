@@ -60,6 +60,11 @@
 #[macro_use]
 extern crate alloc;
 
+// Tests read files and use std collections even when the `std` feature is
+// off, so the no_std configuration can be exercised by the full suite.
+#[cfg(test)]
+extern crate std;
+
 #[allow(dead_code)]
 mod bitstream;
 mod cabac;

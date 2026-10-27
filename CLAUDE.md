@@ -16,6 +16,7 @@ This is a Rust project using Cargo:
 - **Lint:** `cargo clippy`
 - **Format:** `cargo fmt`
 - **Check:** `cargo check`
+- **no_std check:** `cargo test --no-default-features` (the `std` feature is on by default; without it the crate is `#![no_std]` + `alloc`)
 
 ## Milestones
 
