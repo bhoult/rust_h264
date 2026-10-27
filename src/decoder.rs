@@ -83,12 +83,10 @@ struct PictureState {
     mmco_ops: Vec<(u32, u32)>,
     long_term_reference_flag: bool,
     is_intra_slice: bool,
-    // Deblock parameters (from first slice; per-slice deblock offsets
-    // could differ but we use the first slice's values)
-    disable_deblocking_filter_idc: u32,
-    slice_alpha_c0_offset_div2: i32,
-    slice_beta_offset_div2: i32,
+    /// Deblocking settings of each slice so far, indexed by slice ID
+    slice_deblock: Vec<deblock::SliceDeblock>,
     chroma_qp_index_offset: i32,
+    second_chroma_qp_index_offset: i32,
     mb_width: u32,
     mb_height: u32,
     /// Per-MB-pair field decoding flag (MBAFF only). Indexed by pair address.
@@ -293,10 +291,10 @@ impl Decoder {
                 &mut ps.frame,
                 &ps.mb_info,
                 ps.mb_width as usize,
-                ps.disable_deblocking_filter_idc,
-                ps.slice_alpha_c0_offset_div2,
-                ps.slice_beta_offset_div2,
+                &ps.mb_slice_id,
+                &ps.slice_deblock,
                 ps.chroma_qp_index_offset,
+                ps.second_chroma_qp_index_offset,
                 ps.mbaff_frame_flag,
             );
         }
@@ -764,10 +762,9 @@ impl Decoder {
                 mmco_ops: header.mmco_ops.clone(),
                 long_term_reference_flag: header.long_term_reference_flag,
                 is_intra_slice: header.slice_type == SliceType::I,
-                disable_deblocking_filter_idc: header.disable_deblocking_filter_idc,
-                slice_alpha_c0_offset_div2: header.slice_alpha_c0_offset_div2,
-                slice_beta_offset_div2: header.slice_beta_offset_div2,
+                slice_deblock: Vec::new(),
                 chroma_qp_index_offset: pps.chroma_qp_index_offset,
+                second_chroma_qp_index_offset: pps.second_chroma_qp_index_offset,
                 mb_width,
                 mb_height,
                 mb_field_decoding: vec![false; total_mbs.div_ceil(2)],
@@ -811,10 +808,9 @@ impl Decoder {
             mmco_ops: _ps_mmco_ops,
             long_term_reference_flag: _ps_lt_ref_flag,
             is_intra_slice: _ps_is_intra,
-            disable_deblocking_filter_idc: ps_deblock_idc,
-            slice_alpha_c0_offset_div2: ps_alpha,
-            slice_beta_offset_div2: ps_beta,
+            mut slice_deblock,
             chroma_qp_index_offset: ps_chroma_qp_offset,
+            second_chroma_qp_index_offset: ps_second_chroma_qp_offset,
             mb_width: _ps_mb_width,
             mb_height: _ps_mb_height,
             mb_field_decoding: mut _mb_field_decoding,
@@ -829,6 +825,14 @@ impl Decoder {
             current_slice_id += 1;
         }
         let this_slice_id = current_slice_id;
+        // This slice's deblocking settings, at its ID
+        let this_slice_deblock = deblock::SliceDeblock {
+            disable_deblocking_filter_idc: header.disable_deblocking_filter_idc,
+            slice_alpha_c0_offset_div2: header.slice_alpha_c0_offset_div2,
+            slice_beta_offset_div2: header.slice_beta_offset_div2,
+        };
+        slice_deblock.resize(usize::from(this_slice_id), this_slice_deblock);
+        slice_deblock.push(this_slice_deblock);
 
         // Each slice reinitializes its own QP from the slice header
         let mut prev_mb_qp = slice_qp;
@@ -1133,10 +1137,9 @@ impl Decoder {
             mmco_ops: header.mmco_ops.clone(),
             long_term_reference_flag: header.long_term_reference_flag,
             is_intra_slice: header.slice_type == SliceType::I,
-            disable_deblocking_filter_idc: ps_deblock_idc,
-            slice_alpha_c0_offset_div2: ps_alpha,
-            slice_beta_offset_div2: ps_beta,
+            slice_deblock,
             chroma_qp_index_offset: ps_chroma_qp_offset,
+            second_chroma_qp_index_offset: ps_second_chroma_qp_offset,
             mb_width,
             mb_height,
             mb_field_decoding: _mb_field_decoding,
